@@ -3,13 +3,14 @@ package br.com.barbara.planner.service;
 import br.com.barbara.planner.domain.entity.Trip;
 import br.com.barbara.planner.dto.trip.TripCreateResponse;
 import br.com.barbara.planner.dto.trip.TripRequestPayload;
+import br.com.barbara.planner.exception.InvalidTripDatesException;
+import br.com.barbara.planner.exception.TripNotFoundException;
 import br.com.barbara.planner.repository.TripRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -20,42 +21,49 @@ public class TripService {
     private final ParticipantService participantService;
 
     public TripCreateResponse createTrip(TripRequestPayload payload) {
+        LocalDateTime startsAt = LocalDateTime.parse(payload.startsAt(), DateTimeFormatter.ISO_DATE_TIME);
+        LocalDateTime endsAt = LocalDateTime.parse(payload.endsAt(), DateTimeFormatter.ISO_DATE_TIME);
+
+        if (endsAt.isBefore(startsAt)) {
+            throw new InvalidTripDatesException("A data de término da viagem (" + endsAt + ") não pode ser anterior à data de início (" + startsAt + ").");
+        }
+
         Trip newTrip = new Trip(payload);
         this.tripRepository.save(newTrip);
-        this.participantService.registerParticipantsToEvent(payload.emails_to_invite(), newTrip);
+
+        this.participantService.registerParticipantsToEvent(payload.emailsToInvite(), newTrip);
         return new TripCreateResponse(newTrip.getId());
     }
 
-    public Optional<Trip> getTripDetails(UUID id) {
-        return this.tripRepository.findById(id);
+    public Trip getTripDetails(UUID id) {
+        return this.tripRepository.findById(id)
+                .orElseThrow(() -> new TripNotFoundException(id));
     }
 
-    public Optional<Trip> updateTrip(UUID id, TripRequestPayload payload) {
-        Optional<Trip> trip = this.tripRepository.findById(id);
-        if (trip.isPresent()) {
-            Trip rawTrip = trip.get();
-            rawTrip.setEndsAt(LocalDateTime.parse(payload.ends_at(), DateTimeFormatter.ISO_DATE_TIME));
-            rawTrip.setStartsAt(LocalDateTime.parse(payload.starts_at(), DateTimeFormatter.ISO_DATE_TIME));
-            rawTrip.setDestination(payload.destination());
-            this.tripRepository.save(rawTrip);
-            return Optional.of(rawTrip);
+    public Trip updateTrip(UUID id, TripRequestPayload payload) {
+        Trip rawTrip = this.getTripDetails(id);
+
+        LocalDateTime startsAt = LocalDateTime.parse(payload.startsAt(), DateTimeFormatter.ISO_DATE_TIME);
+        LocalDateTime endsAt = LocalDateTime.parse(payload.endsAt(), DateTimeFormatter.ISO_DATE_TIME);
+
+        if (endsAt.isBefore(startsAt)) {
+            throw new InvalidTripDatesException("A data de término da viagem (" + endsAt + ") não pode ser anterior à data de início (" + startsAt + ").");
         }
-        return Optional.empty();
+
+        rawTrip.setEndsAt(endsAt);
+        rawTrip.setStartsAt(startsAt);
+        rawTrip.setDestination(payload.destination());
+        return this.tripRepository.save(rawTrip);
     }
 
-    public Optional<Trip> confirmTrip(UUID id) {
-        Optional<Trip> trip = this.tripRepository.findById(id);
-        if (trip.isPresent()) {
-            Trip rawTrip = trip.get();
-            rawTrip.setIsConfirmed(true);
-            this.participantService.triggerConfirmationEmailToParticipants(id);
-            this.tripRepository.save(rawTrip);
-            return Optional.of(rawTrip);
-        }
-        return Optional.empty();
+    public Trip confirmTrip(UUID id) {
+        Trip rawTrip = this.getTripDetails(id);
+        rawTrip.setIsConfirmed(true);
+        this.participantService.triggerConfirmationEmailToParticipants(id);
+        return this.tripRepository.save(rawTrip);
     }
 
-    public Optional<Trip> findById(UUID id) {
-        return this.tripRepository.findById(id);
+    public Trip findById(UUID id) {
+        return this.getTripDetails(id);
     }
 }

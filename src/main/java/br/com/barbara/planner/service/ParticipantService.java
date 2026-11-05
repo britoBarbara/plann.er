@@ -5,12 +5,12 @@ import br.com.barbara.planner.domain.entity.Trip;
 import br.com.barbara.planner.dto.participant.ParticipantCreateResponse;
 import br.com.barbara.planner.dto.participant.ParticipantData;
 import br.com.barbara.planner.dto.participant.ParticipantRequestPayload;
+import br.com.barbara.planner.exception.ParticipantNotFoundException;
 import br.com.barbara.planner.repository.ParticipantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -35,16 +35,12 @@ public class ParticipantService {
         return new ParticipantCreateResponse(newParticipant.getId());
     }
 
-    public Optional<Participant> confirmParticipant(UUID id, ParticipantRequestPayload payload) {
-        Optional<Participant> participant = this.repository.findById(id);
-        if (participant.isPresent()) {
-            Participant rawParticipant = participant.get();
-            rawParticipant.setIsConfirmed(true);
-            rawParticipant.setName(payload.name());
-            this.repository.save(rawParticipant);
-            return Optional.of(rawParticipant);
-        }
-        return Optional.empty();
+    public Participant confirmParticipant(UUID id, ParticipantRequestPayload payload) {
+        Participant rawParticipant = this.repository.findById(id)
+                .orElseThrow(() -> new ParticipantNotFoundException(id));
+        rawParticipant.setIsConfirmed(true);
+        rawParticipant.setName(payload.name());
+        return this.repository.save(rawParticipant);
     }
 
     public void triggerConfirmationEmailToParticipants(UUID tripId) {
