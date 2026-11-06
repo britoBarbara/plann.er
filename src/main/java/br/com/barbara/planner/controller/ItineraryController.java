@@ -15,7 +15,7 @@ public class ItineraryController {
 
     private final ItineraryService itineraryService;
 
-    public ItineraryController(ItineraryService itineraryService) {
+    public  ItineraryController(ItineraryService itineraryService) {
         this.itineraryService = itineraryService;
     }
 
